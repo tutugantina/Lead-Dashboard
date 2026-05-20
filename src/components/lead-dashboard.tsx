@@ -79,8 +79,17 @@ import {
 
 // ===== Constants =====
 const CS_COL_WIDTH = 150;
-const PRODUCT_COL_MIN_WIDTH = 90;
+const PRODUCT_COL_ABS_MIN_WIDTH = 70; // absolute minimum, never go below this
 const SUMMARY_COL_WIDTH = 75;
+
+// Calculate minimum product column width based on longest product name
+function calcProductColMinWidth(products: string[]): number {
+  if (products.length === 0) return PRODUCT_COL_ABS_MIN_WIDTH;
+  const longestName = products.reduce((a, b) => a.length > b.length ? a : b, '');
+  // At ~6px per character for 9px uppercase font + padding
+  const needed = Math.ceil(longestName.length * 6) + 30; // 30px for grip handle + padding
+  return Math.max(PRODUCT_COL_ABS_MIN_WIDTH, Math.min(needed, 280)); // cap at 280px max
+}
 
 // ===== Rate Color Helpers =====
 function getRateColor(rate: number) {
@@ -128,6 +137,7 @@ function SortableCSRow({
   mode,
   rowIndex,
   colWidth,
+  colMinWidth,
 }: {
   cs: CSAggregate;
   products: string[];
@@ -135,6 +145,7 @@ function SortableCSRow({
   mode: 'lead' | 'closing' | 'rate';
   rowIndex: number;
   colWidth: number;
+  colMinWidth: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style: React.CSSProperties = {
@@ -186,7 +197,7 @@ function SortableCSRow({
                   ? 'bg-white dark:bg-gray-900 border-gray-50 dark:border-gray-800'
                   : 'bg-slate-50 dark:bg-gray-800/60 border-gray-50 dark:border-gray-700/50'
               }`}
-              style={{ width: colWidth, minWidth: PRODUCT_COL_MIN_WIDTH }}
+              style={{ width: colWidth, minWidth: colMinWidth }}
             >
               <span className="text-gray-200 dark:text-gray-700 text-xs">—</span>
             </div>
@@ -204,7 +215,7 @@ function SortableCSRow({
                   ? 'bg-white dark:bg-gray-900 border-gray-50 dark:border-gray-800'
                   : 'bg-slate-50 dark:bg-gray-800/60 border-gray-50 dark:border-gray-700/50'
               }`}
-              style={{ width: colWidth, minWidth: PRODUCT_COL_MIN_WIDTH }}
+              style={{ width: colWidth, minWidth: colMinWidth }}
             >
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
@@ -236,7 +247,7 @@ function SortableCSRow({
                     ? 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800'
                     : 'bg-slate-50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800'
               } border-gray-50 dark:border-gray-800`}
-              style={{ width: colWidth, minWidth: PRODUCT_COL_MIN_WIDTH }}
+              style={{ width: colWidth, minWidth: colMinWidth }}
             >
               <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{data.completed}</span>
             </div>
@@ -248,7 +259,7 @@ function SortableCSRow({
           <div
             key={product}
             className={`border-b flex flex-col items-center justify-center gap-0.5 shrink-0 ${rc.bg} transition-colors border-gray-50 dark:border-gray-800`}
-            style={{ width: colWidth, minWidth: PRODUCT_COL_MIN_WIDTH }}
+            style={{ width: colWidth, minWidth: colMinWidth }}
           >
             <TooltipProvider delayDuration={300}>
               <Tooltip>
@@ -302,23 +313,21 @@ function SortableCSRow({
 }
 
 // ===== Sortable Column Header =====
-function SortableColHeader({ id, label, colWidth }: { id: string; label: string; colWidth: number }) {
+function SortableColHeader({ id, label, colWidth, colMinWidth }: { id: string; label: string; colWidth: number; colMinWidth: number }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     width: colWidth,
-    minWidth: PRODUCT_COL_MIN_WIDTH,
+    minWidth: colMinWidth,
     opacity: isDragging ? 0.4 : 1,
   };
-  const maxTextWidth = Math.max(60, colWidth - 30);
-  const short = label.length > Math.floor(maxTextWidth / 6) ? label.substring(0, Math.floor(maxTextWidth / 6) - 1) + '…' : label;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-slate-800 dark:bg-gray-950 border-b border-r border-slate-700 dark:border-gray-800 px-1.5 py-3 text-center shrink-0"
+      className="bg-slate-800 dark:bg-gray-950 border-b border-r border-slate-700 dark:border-gray-800 px-1.5 py-2 text-center shrink-0"
     >
       <div className="flex items-center justify-center gap-0.5">
         <button
@@ -328,8 +337,8 @@ function SortableColHeader({ id, label, colWidth }: { id: string; label: string;
         >
           <GripVertical className="w-3 h-3 rotate-90" />
         </button>
-        <span className="text-[9px] font-bold text-slate-300 dark:text-gray-400 truncate uppercase tracking-wider" style={{ maxWidth: `${maxTextWidth}px` }} title={label}>
-          {short}
+        <span className="text-[9px] font-bold text-slate-300 dark:text-gray-400 uppercase tracking-wider whitespace-normal break-words leading-tight" title={label}>
+          {label}
         </span>
       </div>
     </div>
@@ -479,12 +488,13 @@ function DashboardGrid({ processed, mode }: { processed: ProcessedData; mode: 'l
     return () => observer.disconnect();
   }, []);
 
-  // Calculate dynamic column width: expand if few products, min 90px
+  // Calculate dynamic minimum column width based on product names
   const numProducts = processed.products.length;
+  const productColMinWidth = useMemo(() => calcProductColMinWidth(processed.products), [processed.products]);
   const availableForProducts = containerWidth > 0 ? containerWidth - CS_COL_WIDTH - SUMMARY_COL_WIDTH : 0;
   const colWidth = numProducts > 0 && availableForProducts > 0
-    ? Math.max(PRODUCT_COL_MIN_WIDTH, Math.floor(availableForProducts / numProducts))
-    : PRODUCT_COL_MIN_WIDTH;
+    ? Math.max(productColMinWidth, Math.floor(availableForProducts / numProducts))
+    : productColMinWidth;
 
   const rowSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const colSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -512,7 +522,7 @@ function DashboardGrid({ processed, mode }: { processed: ProcessedData; mode: 'l
   }, [processed.products, setProductOrder]);
 
   const summaryLabel = mode === 'lead' ? 'TOTAL' : mode === 'closing' ? 'DONE' : 'CL RATE';
-  const gridMinWidth = CS_COL_WIDTH + numProducts * PRODUCT_COL_MIN_WIDTH + SUMMARY_COL_WIDTH;
+  const gridMinWidth = CS_COL_WIDTH + numProducts * productColMinWidth + SUMMARY_COL_WIDTH;
   // Use the wider of: min width or expanded width
   const actualWidth = CS_COL_WIDTH + numProducts * colWidth + SUMMARY_COL_WIDTH;
   const useFullWidth = actualWidth <= containerWidth || containerWidth === 0;
@@ -533,7 +543,7 @@ function DashboardGrid({ processed, mode }: { processed: ProcessedData; mode: 'l
               </div>
               {/* Product Headers */}
               {processed.products.map((p) => (
-                <SortableColHeader key={p} id={p} label={p} colWidth={colWidth} />
+                <SortableColHeader key={p} id={p} label={p} colWidth={colWidth} colMinWidth={productColMinWidth} />
               ))}
               {/* Summary Header */}
               <div
@@ -556,7 +566,7 @@ function DashboardGrid({ processed, mode }: { processed: ProcessedData; mode: 'l
           <SortableContext items={processed.csData.map((cs) => cs.csName)} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col" style={{ minWidth: `${gridMinWidth}px`, width: useFullWidth ? '100%' : undefined }}>
               {processed.csData.map((cs, idx) => (
-                <SortableCSRow key={cs.csName} cs={cs} products={processed.products} id={cs.csName} mode={mode} rowIndex={idx} colWidth={colWidth} />
+                <SortableCSRow key={cs.csName} cs={cs} products={processed.products} id={cs.csName} mode={mode} rowIndex={idx} colWidth={colWidth} colMinWidth={productColMinWidth} />
               ))}
             </div>
           </SortableContext>
@@ -579,16 +589,16 @@ function DashboardGrid({ processed, mode }: { processed: ProcessedData; mode: 'l
           </div>
           {processed.products.map((product) => {
             const pt = processed.productTotals.find((p) => p.productName === product);
-            if (!pt) return <div key={product} className="border-t-2 border-r border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0" style={{ width: colWidth, minWidth: PRODUCT_COL_MIN_WIDTH }}><span className="text-gray-200 dark:text-gray-700 text-xs">—</span></div>;
+            if (!pt) return <div key={product} className="border-t-2 border-r border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0" style={{ width: colWidth, minWidth: productColMinWidth }}><span className="text-gray-200 dark:text-gray-700 text-xs">—</span></div>;
             const rc = getRateColor(pt.closingRate);
 
             if (mode === 'lead') {
-              return <div key={product} className="border-t-2 border-r border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0 bg-gray-50/60 dark:bg-gray-800/60" style={{ width: colWidth, minWidth: PRODUCT_COL_MIN_WIDTH }}><span className="text-sm font-bold text-gray-800 dark:text-gray-200 tabular-nums">{pt.totalLeads}</span></div>;
+              return <div key={product} className="border-t-2 border-r border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0 bg-gray-50/60 dark:bg-gray-800/60" style={{ width: colWidth, minWidth: productColMinWidth }}><span className="text-sm font-bold text-gray-800 dark:text-gray-200 tabular-nums">{pt.totalLeads}</span></div>;
             }
             if (mode === 'closing') {
-              return <div key={product} className="border-t-2 border-r border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0 bg-emerald-50/60 dark:bg-emerald-950/30" style={{ width: colWidth, minWidth: PRODUCT_COL_MIN_WIDTH }}><span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{pt.totalCompleted}</span></div>;
+              return <div key={product} className="border-t-2 border-r border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0 bg-emerald-50/60 dark:bg-emerald-950/30" style={{ width: colWidth, minWidth: productColMinWidth }}><span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{pt.totalCompleted}</span></div>;
             }
-            return <div key={product} className={`border-t-2 border-r border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0 ${rc.bg}`} style={{ width: colWidth, minWidth: PRODUCT_COL_MIN_WIDTH }}><span className={`text-sm font-bold tabular-nums ${rc.text}`}>{pt.closingRate.toFixed(1)}%</span></div>;
+            return <div key={product} className={`border-t-2 border-r border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0 ${rc.bg}`} style={{ width: colWidth, minWidth: productColMinWidth }}><span className={`text-sm font-bold tabular-nums ${rc.text}`}>{pt.closingRate.toFixed(1)}%</span></div>;
           })}
           {mode === 'lead' && (
             <div className="border-t-2 border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0 bg-gray-100/80 dark:bg-gray-700/50" style={{ width: SUMMARY_COL_WIDTH, minWidth: SUMMARY_COL_WIDTH }}><span className="text-sm font-bold text-gray-800 dark:text-gray-200 tabular-nums">{processed.overallTotal.toLocaleString()}</span></div>
