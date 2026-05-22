@@ -51,7 +51,6 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
@@ -391,7 +390,7 @@ function MergeSettingsDialog() {
           </DialogTitle>
         </DialogHeader>
         <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">Gabungkan beberapa nama produk menjadi satu untuk tampilan yang rapi.</p>
-        <ScrollArea className="flex-1 -mx-6 px-6">
+        <div className="flex-1 overflow-y-auto -mx-6 px-6 min-h-0" style={{ scrollbarWidth: 'thin' }}>
           <div className="space-y-4 py-2">
             {productMergeGroups.length > 0 && (
               <div className="space-y-2">
@@ -421,7 +420,7 @@ function MergeSettingsDialog() {
               <Input placeholder="Nama produk gabungan (misal: Ochiban Black)" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} className="text-sm" />
               <div className="space-y-1.5">
                 <p className="text-[10px] text-gray-400 dark:text-gray-500">Pilih produk yang ingin digabung:</p>
-                <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto">
+                <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                   {availableProducts.map((product) => (
                     <button
                       key={product}
@@ -444,7 +443,7 @@ function MergeSettingsDialog() {
               </Button>
             </div>
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
